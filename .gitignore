@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.pkl
+*.vtt
+.env
+dataset_v2.csv
+tedDirector/
+.venv/

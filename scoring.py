@@ -1,60 +1,70 @@
 """
 scoring.py
 
-Computes interpretable presentation quality score using heuristic rules.
+Robust automatic scoring using:
+- Readability
+- Lexical diversity
+- Grammar quality
 """
 
-from typing import Dict
+import textstat
+import language_tool_python
 
 
-def compute_score(features: Dict) -> float:
+# Init grammar checker (lazy loading conseillé en prod)
+tool = language_tool_python.LanguageTool('en-US')
+
+
+def compute_score_v2(text: str, tokens: list) -> float:
     """
-    Compute final score based on extracted features.
-
-    Args:
-        features (Dict): Feature dictionary
-
-    Returns:
-        float: score between 0 and 10
+    Compute a quality score (0 → 10)
     """
 
-    score = 0.0
+    # -------------------------
+    # 1. Readability (Flesch)
+    # -------------------------
+    try:
+        readability = textstat.flesch_reading_ease(text)
+        readability_score = max(0, min(readability / 100, 1))
+    except:
+        readability_score = 0.5
 
-    # --- Clarity (sentence length) ---
-    if 8 <= features["avg_sentence_length"] <= 20:
-        score += 2
-    elif 5 <= features["avg_sentence_length"] < 8:
-        score += 1
+    # -------------------------
+    # 2. Lexical Diversity (TTR)
+    # -------------------------
+    if len(tokens) > 0:
+        ttr = len(set(tokens)) / len(tokens)
     else:
-        score += 0.5
+        ttr = 0
 
-    # --- Vocabulary richness ---
-    if features["vocab_richness"] > 0.6:
-        score += 2
-    elif features["vocab_richness"] > 0.4:
-        score += 1.5
+    # -------------------------
+    # 3. Grammar Errors
+    # -------------------------
+    try:
+        matches = tool.check(text)
+        error_rate = len(matches) / max(len(tokens), 1)
+        grammar_score = max(0, 1 - error_rate)
+    except:
+        grammar_score = 0.5
+
+    # -------------------------
+    # 4. Length penalty
+    # -------------------------
+    length = len(tokens)
+    if length < 5:
+        length_penalty = 0.3
+    elif length < 10:
+        length_penalty = 0.6
     else:
-        score += 1
+        length_penalty = 1.0
 
-    # --- Logical connectors ---
-    if features["connector_count"] >= 3:
-        score += 2
-    elif features["connector_count"] >= 1:
-        score += 1
+    # -------------------------
+    # FINAL SCORE
+    # -------------------------
+    score = (
+        readability_score * 3 +
+        ttr * 3 +
+        grammar_score * 4
+    ) * length_penalty
 
-    # --- Complexity ---
-    if 0.2 <= features["complexity"] <= 0.4:
-        score += 2
-    else:
-        score += 1
-
-    # --- Fluency (repetition penalty) ---
-    if features["repetition_rate"] < 0.1:
-        score += 2
-    elif features["repetition_rate"] < 0.2:
-        score += 1
-    else:
-        score += 0.5
-
-    # Normalize to 10
-    return round(min(score, 10), 2)
+    return round(max(0, min(score, 10)), 2)

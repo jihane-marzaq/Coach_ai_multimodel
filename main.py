@@ -1,52 +1,68 @@
 """
 main.py
-
-Pipeline orchestration:
-preprocessing → features → scoring → feedback
+Pipeline : SBERT → score  |  Gemini → feedback
 """
 
-from preprocessing import preprocess_texts
-from features import extract_features
-from scoring import compute_score
-from feedback import generate_feedback
+import sys
+import joblib
+from sentence_transformers import SentenceTransformer
+
+# ─────────────────────────────────────────
+MODEL_PATH  = "model_sbert3.pkl"
+SBERT_NAME  = "all-MiniLM-L6-v2"
 
 
+# ─────────────────────────────────────────
 def run_pipeline(text: str):
-    """
-    Run full NLP evaluation pipeline with AI feedback.
+    print("\n" + "=" * 50)
+    print("📝 TEXTE ANALYSÉ :")
+    print(text)
+    print("=" * 50)
 
-    Args:
-        text (str): input text
-    """
+    from preprocessing import preprocess_texts
+    from features import extract_features
+    from feedback import generate_feedback
+
+    # --- Chargement SBERT (depuis HuggingFace, pas joblib) ---
+    print("\n📦 Chargement de SBERT...")
+    sbert_model = SentenceTransformer(SBERT_NAME)
+    print("✅ SBERT chargé.")
+
+    # --- Chargement regressor ---
+    print("📦 Chargement du regressor...")
+    regressor = joblib.load(MODEL_PATH)
+    print("✅ Regressor chargé.")
 
     # --- Preprocessing ---
-    tokens, doc = preprocess_texts([text])[0]
+    print("🔄 Preprocessing...")
+    processed = preprocess_texts([text])
+    if not processed:
+        print("❌ Texte trop court ou vide.")
+        sys.exit(1)
+    tokens, doc = processed[0]
 
-    # --- Feature extraction ---
+    # --- Features ---
+    print("📐 Extraction des features...")
     features = extract_features(tokens, doc)
 
-    # --- Scoring ---
-    score = compute_score(features)
+    # --- Score ---
+    print("🔢 Calcul du score...")
+    embedding = sbert_model.encode([text])
+    score = round(float(regressor.predict(embedding)[0]), 2)
 
-    # --- Feedback (Gemini) ---
-    feedback = generate_feedback(features, score, text)
+    # --- Feedback Gemini ---
+    #print("🤖 Génération du feedback Gemini...")
+    #feedback = generate_feedback(features, score, text)
 
-    # --- Output ---
-    print("\n=== FEATURES ===")
-    for k, v in features.items():
-        print(f"{k}: {v}")
-
-    print("\n=== FINAL SCORE ===")
-    print(score)
-
-    print("\n=== AI FEEDBACK ===")
-    print(feedback)
+    # --- Résultat ---
+    print("\n" + "=" * 50)
+    print(f"🏆 SCORE FINAL : {score} / 10")
+    print("=" * 50)
+    print("\n💬 FEEDBACK & CONSEILS :\n")
+    #print(feedback)
+    print("=" * 50)
 
 
+# ─────────────────────────────────────────
 if __name__ == "__main__":
-    sample_text = """
-    Today I want to present my idea. It is good. It is very useful.
-    However, it still needs improvements because some parts are not clear.
-    """
-
-    run_pipeline(sample_text)
+    run_pipeline("I present something and I repeat many time")
