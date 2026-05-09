@@ -2,5 +2,6 @@ services:
   - type: web
     name: ai-api
     env: python
+    runtime: python3.11
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn creat_api:app --host 0.0.0.0 --port $PORT
